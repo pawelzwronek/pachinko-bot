@@ -13,6 +13,8 @@
 	<link rel="shortcut icon" type="image/png" href="./favicon.png">
 	
 	<script src="./progress.js"></script>
+	<script src="./main.js"></script>
+	<script src="./lines.js"></script>
 	
 	<script>
 		window.addEventListener ("touchmove", function (event) { event.preventDefault (); }, { capture: false, passive: false });
@@ -26,6 +28,78 @@
 		html,body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
 		#openfl-content { background: #000000; width: 100%; height: 100%; }
 		#progress { position: relative; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50%; }
+		canvas {
+			width: 320px !important;
+			height: 180px !important;
+			margin: 0 !important;
+		}
+		#debug {
+			font-family: cursive;
+			
+			position: fixed;
+    		top: 180px;
+			width: calc(320px - .6em);
+			padding: .3em;
+    		color: gray;
+			display: flex;
+			flex-direction: column;
+		}
+		#canvas1 {
+			position: fixed;
+			top: 0;
+			z-index: 9;
+			image-rendering: pixelated;
+		}
+		#openfl-content {
+			background: rgb(0, 0, 0);
+		}
+
+		#buttons {
+			display: flex;
+			align-self: center;
+		}
+		#buttons>svg {
+			padding: 0 .3rem;
+			margin: -1rem;
+		}
+		#buttons .pressed {
+			fill: rgb(31, 182, 31);
+		}
+		#bt_left {
+			rotate: -90deg;
+		}
+		#bt_right {
+			rotate: 90deg;
+		}
+
+		#pos {
+			margin-top: 1rem;
+		}
+		#info {
+			position: fixed;
+			display: flex;
+			flex-direction: column;
+			font-size: 0.8rem;
+			text-transform: uppercase;
+		}
+		#info .line {
+			display: flex;
+		}
+		#info .value {
+			padding-left: .3em ;
+		}
+		#info #time .value,.ms {
+			color: rgb(31, 182, 31);
+		}
+		#info #time .ms {
+			font-size: .6em;
+			align-self: end;
+			margin-bottom: 0.15em;
+			margin-left: 0.1em;
+		}
+		#info #iter {
+			font-size: .5em;
+		}
 
 	</style>
 	
@@ -34,7 +108,25 @@
 	
 	<noscript>This webpage makes extensive use of JavaScript. Please enable JavaScript in your web browser to view this page.</noscript>
 	
-	<div id="openfl-content"><progress id="progress" value="0" max = "1"></progress></div>
+	<div id="openfl-content">
+		<progress id="progress" value="0" max = "1"></progress>
+	</div>
+	<canvas id="canvas1"></canvas>
+	<div id="debug">
+		<div id="info">
+			<div class="line" id="time"> time: <div class="value">0:00</div><div class="ms">00</div></div>
+			<div class="line" id="iter"> iter: <div class="value">0</div> </div>
+		</div>
+		<div id="buttons">
+			<svg id="bt_left" height="48" width="48"><path d="M17.65 28q-1 0-1.375-.925t.325-1.625L23 19q.25-.25.5-.325.25-.075.55-.075.3 0 .55.075.25.075.5.325l6.4 6.45q.7.7.325 1.625Q31.45 28 30.45 28Z"/></svg>
+			<svg id="bt_up" height="48" width="48"><path d="M17.65 28q-1 0-1.375-.925t.325-1.625L23 19q.25-.25.5-.325.25-.075.55-.075.3 0 .55.075.25.075.5.325l6.4 6.45q.7.7.325 1.625Q31.45 28 30.45 28Z"/></svg>
+			<svg id="bt_right" height="48" width="48"><path d="M17.65 28q-1 0-1.375-.925t.325-1.625L23 19q.25-.25.5-.325.25-.075.55-.075.3 0 .55.075.25.075.5.325l6.4 6.45q.7.7.325 1.625Q31.45 28 30.45 28Z"/></svg>
+		</div>
+		<span id="pos">0,0</span>
+		<span id="mouse">0,0</span>
+		<span id="state">-1</span>
+		<span id="lags">0</span>
+	</div>
 	
 	<script>
 		
@@ -54,6 +146,7 @@
 		var __completionCallback = function __completionCallback() {
 			__progressBar.parentNode.removeChild(__progressBar);
 			lime.embed ("PACHIN KO", "openfl-content", 960, 540, { parameters: {} });
+			mainRun();
 		};
 
 		__loadWithProgress(__filesToLoad, __progressListener, __completionCallback);
