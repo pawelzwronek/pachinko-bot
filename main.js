@@ -1,12 +1,15 @@
-const TO_VIDEO = true;
+const TO_VIDEO = false;
+
+const TELEPORT = false;
+const TELEPORT_TO = 5;
+// When stopped, you can draw new line to follow(only one continous line) and paste it to 'lines.js'
+// const STOP_AT = TELEPORT_TO + 1;
+const STOP_AT = -1;
 
 const PAINT = !TO_VIDEO;
 
-const TELEPORT = false;
-const TELEPORT_TO = 6;
 let trackLine = true;
 let trackMouse = false;
-const SKIP_TO_STATE = 0;
 
 
 const W = 320;
@@ -20,7 +23,7 @@ let px = 0;
 let py = 0;
 let sx = 0;
 let sy = 0;
-let state = -1;
+let stage = -1;
 let mx = 0;
 let my = 0;
 let followX = 0;
@@ -46,6 +49,61 @@ let startTime = 0;
 
 let lastT = performance.now();
 
+
+let line = [];
+let holdingSpace = false;
+let holdingArrow = 0;
+
+async function mainRun() {
+    console.log('mainRun');
+
+    $(window).on('keypress', (event) => {
+        switch (event.key.toLowerCase()) {
+            case 't':
+                trackMouse = !trackMouse;
+                followX = px;
+                followY = py;
+            break;
+            case 'd': disable = !disable; break;
+
+            default: 
+        }
+    })
+
+    $('#canvas1').on('mousedown', (ev) => {
+        line = [];
+        mdown = true;
+    })
+
+    $('#canvas1').on('mousemove', (ev) => {
+        mx = ev.clientX;
+        my = ev.clientY;
+        if (mdown) {
+            line.push([mx, my]);
+        }
+    })
+
+    $('#canvas1').on('mouseup mouseleave', (ev) => {
+        mdown = false;
+        if (line.length > 10) {
+            navigator.clipboard.writeText(`lines[${scene}] = ${JSON.stringify(line)};`);
+            line = [];
+            alert('Line copied to clipboard')
+        }
+    })
+
+
+    await sleep(2000);
+    
+    await pressEnter(); await sleep(200);
+    await pressEnter(); await sleep(200);
+    await pressEnter(); await sleep(200);
+    await pressEnter(); await sleep(200);
+    
+    stage = 99;
+}
+
+// Executed from 'PACHIN KO.js'
 function PLAYER_CHANGED(p = 
 {
     x: 0,
@@ -59,6 +117,7 @@ function PLAYER_CHANGED(p =
     const t = performance.now();
     const dt = (t - lastT) / 1000;
     if (dt > 0.01) {
+        lastT = t;
         const endDraw = startDraw();
 
         scene = 10 - Math.floor(p.gy / H);
@@ -71,14 +130,19 @@ function PLAYER_CHANGED(p =
             iter = 0;
             startTime = performance.now() + (DTs * 0 * 1000);
         } 
-    
-        if (state == 7) {
+
+        if (stage == 6) {
+            lineSpeed = 2;
+            if (lineIdx > 250)
+                lineSpeed = 0.9;
+        }
+        if (stage == 7) {
             MODE = 0;
             PRECISE = true;
             lineSpeed = 1.2;
             if (lineIdx > 1040) lineSpeed = 0.8; 
         }
-        if (state == 10) {
+        if (stage == 10) {
             if (lineIdx > 700 && lineSpeedPos == 0) {
                 lineSpeedPos = lineIdx;
             }
@@ -92,7 +156,7 @@ function PLAYER_CHANGED(p =
             }
         }
 
-        lastT = t;
+        // Calculate speed
         const alpha = (MODE && !PRECISE) ? 0.5 : 0;
         sx = sx * alpha + (1-alpha) * (p.x - px) / dt;
         sy = sy * alpha + (1-alpha) * (p.y - py) / dt;
@@ -101,20 +165,8 @@ function PLAYER_CHANGED(p =
 
         speed = speed * 0.9 + 0.1 * Math.sqrt(sx**2 + sy**2);
 
-        let maxSpeed = 9999;
-        let distanceD = 10;
 
-        if (SKIP_TO_STATE && state < SKIP_TO_STATE && state != 5)
-            distanceD = 20;
-
-        if (state == 6) {
-            lineSpeed = 2;
-            if (lineIdx > 250)
-                lineSpeed = 0.9;
-        }
-
-
-        if (TELEPORT && state == 99) {
+        if (TELEPORT && stage == 99) {
             if (py > 0 && py < 20) {
                 [followX, followY] = [W / 2, H];
                 this.setY(H * 11 - 20);
@@ -154,10 +206,10 @@ function PLAYER_CHANGED(p =
                         [followX, followY] = line[lineIdx];
                     }, 1000)
                 }
-                state = TELEPORT_TO;
+                stage = TELEPORT_TO;
                 waitForScene = TELEPORT_TO;
             }
-        } else if (state >= 0) {
+        } else if (stage >= 0) {
             if (dt > 0.03) {
                 lags++;
                 console.log('lag', dt);
@@ -171,11 +223,11 @@ function PLAYER_CHANGED(p =
             }
 
             if (trackLine) {
-                let line = lines[state];
+                const line = lines[stage];
                 if (scene == waitForScene && iter >= waitToIter) {
-                    if(line) {
+                    if(line && STOP_AT != stage) {
                         function checkSleep() {
-                            let sleep = sleeps[state]?.find(s => s[0] == lineIdx);
+                            const sleep = sleeps[stage]?.find(s => s[0] == lineIdx);
                             if (sleep) {
                                 waitToIter = iter + Math.round(sleep[1] / DTs);
                             }
@@ -186,15 +238,16 @@ function PLAYER_CHANGED(p =
                             lineIdx = Math.round(lineSpeedPos);
                             if (lineIdx < line.length) {
                                 [tX, tY] = line[lineIdx];
-                                if (state == 7) {
+                                if (stage == 7) {
                                     if ((lineIdx > 570 && lineIdx < 700) || (lineIdx > 1040 && lineIdx < 1100)) tX += 2; 
                                     if (lineIdx > 780 && lineIdx < 900) tX -= 2; 
                                 }
                                 [followX, followY] = [tX, tY];
                                 checkSleep();
                             } else {
+                                // End of line, switch to next stage
                                 waitForScene = scene + 1;
-                                state++;
+                                stage++;
                                 [followX, followY] = [px, -10];
                                 lineIdx = 0;
                                 lineSpeedPos = 0;
@@ -203,21 +256,19 @@ function PLAYER_CHANGED(p =
                             let lastDist = 0;
                             do {
                                 [tX, tY] = line[lineIdx];
-                                if (state == 5) {
-                                    // tY += 0.5; 
-                                }
 
-                                let dist = distance([tX, tY], [px, py]);
-                                if (dist < (MODE ? (speed > maxSpeed ? 4 : distanceD) : 7) && dist >= lastDist) {
+                                const dist = distance([tX, tY], [px, py]);
+                                if (dist < (MODE ? 10 : 7) && dist >= lastDist) {
                                     lastDist = dist;
                                     lineIdx++;
                                     if (lineIdx >= line.length) {
+                                        // End of line, switch to next stage
                                         waitForScene = scene + 1;
-                                        if (state == 99) {
-                                            state = 0;
+                                        if (stage == 99) {
+                                            stage = 0;
                                             waitForScene = 0;
                                         } else {
-                                            state++;
+                                            stage++;
                                         }
                                         [followX, followY] = [px, -10];
                                         lineIdx = 0;
@@ -225,17 +276,17 @@ function PLAYER_CHANGED(p =
                                     [followX, followY] = [tX, tY];
                                     checkSleep();
                                 } else break;
-                                if (speed > maxSpeed)
-                                    break;
                             } while(1);
                         }
                     } else {
+                        // No line, stay in place
                         followY = H - 10;
                     }
                 }
             }
 
-            if (state == 11 && px <= 174 && py <= 23) {
+            // The end of the game
+            if (stage == 11 && px <= 174 && py <= 23) {
                 disable = true;
                 releaseLeft();
                 releaseSpace();
@@ -244,12 +295,14 @@ function PLAYER_CHANGED(p =
                 holdingArrow = 0;
             }
 
+            // Movement controller
             if (!disable) {
                 if (PAINT) {
                     color = [255, 0,0, 255];
                     drawPoint([tX, tY]);
                 }
     
+                // Y axis
                 ty = py - 1.5;
                 let sy1 = sy;
                 while (sy1 != 0) {
@@ -268,6 +321,7 @@ function PLAYER_CHANGED(p =
                     releaseSpace();
                 }
         
+                // X axis
                 let px1 = px - 1.5;
                 tx = px1;
                 let sx1 = sx;
@@ -301,7 +355,7 @@ function PLAYER_CHANGED(p =
         $('#pos').text('pos: ' + px.toFixed(1) + ' ' + py.toFixed(1));
         // $('#mouse').text('mouse: ' + mx.toFixed(1) + ' ' + my.toFixed(1));
         $('#mouse').text('speed: ' + speed.toFixed(1));
-        $('#state').text('state: ' + state + ' idx: ' + lineIdx + (iter < waitToIter ? ', sleep' : ''));
+        $('#state').text('stage: ' + stage + ' idx: ' + lineIdx + (iter < waitToIter ? ', sleep' : ''));
         $('#lags').text('lags: ' + lags);
         if (startTime > 0) {
             let timeMs = Math.max(0, (performance.now() - startTime));
@@ -315,7 +369,7 @@ function PLAYER_CHANGED(p =
 
         if (PAINT) {
             color = [0, 255, 0, 80];
-            let line1 = lines[state];
+            let line1 = lines[stage];
             pairs(line1).forEach(p => bline(p[0], p[1]));
             color = [255, 0,0, 128];
             pairs(line).forEach(p => bline(p[0], p[1]));
@@ -331,53 +385,6 @@ function PLAYER_CHANGED(p =
     }
 }
 
-let line = [];
-let holdingSpace = false;
-let holdingArrow = 0;
-
-async function mainRun() {
-    console.log('main');
-    $(window).on('keypress', (event) => {
-        switch (event.key.toLowerCase()) {
-            case 't':
-                trackMouse = !trackMouse;
-                followX = px;
-                followY = py;
-            break;
-            case 'd': disable = !disable; break;
-
-            default: 
-        }
-    })
-    $('#canvas1').on('mousemove', (ev) => {
-        mx = ev.clientX;
-        my = ev.clientY;
-        if (mdown) {
-            line.push([mx, my]);
-        }
-    })
-    $('#canvas1').on('mouseup mouseleave', (ev) => {
-        // lines.push(line);
-        mdown = false;
-        console.log('mouseup');
-        navigator.clipboard.writeText(`lines[${scene}] = ${JSON.stringify(line)};`);
-    })
-    $('#canvas1').on('mousedown', (ev) => {
-        line = [];
-        mdown = true;
-        console.log('mousedown');
-    })
-
-
-    await sleep(2000);
-    
-    await pressEnter(); await sleep(200);
-    await pressEnter(); await sleep(200);
-    await pressEnter(); await sleep(200);
-    await pressEnter(); await sleep(200);
-    
-    state = 99;
-}
 
 async function sleep(timeMs = 0) {
     return new Promise(resolve => setTimeout(resolve, timeMs));
@@ -387,12 +394,12 @@ async function sleep(timeMs = 0) {
 function startDraw() {
     if (!PAINT)
         return () => {};
-    var c = getCanvas();
+    const c = getCanvas();
     if (c.width != W) {
         c.width = W;
         c.height = H;
     }
-    var ctx = c.getContext("2d");
+    const ctx = c.getContext("2d");
     if (ctx) {
         ctx.clearRect(0, 0, c.width, c.height);
 
@@ -419,9 +426,9 @@ function setPixel(x, y) {
 // Refer to: http://rosettacode.org/wiki/Bitmap/Bresenham's_line_algorithm#JavaScript
 function bline(p1, p2) {
     let x0 = p1[0], y0=p1[1], x1=p2[0], y1=p2[1];
-    var dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    var dy = Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
-    var err = (dx>dy ? dx : -dy) / 2;        
+    const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    const dy = Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
+    let err = (dx>dy ? dx : -dy) / 2;        
     while (true) {
         setPixel(x0, y0);
         if (x0 === x1 && y0 === y1) break;
@@ -439,8 +446,7 @@ function drawPoint(p1) {
 
 
 function getCanvas() {
-    let a = document.getElementsByTagName('canvas')[1];
-    return a;
+    return document.getElementById('canvas1');
 }
 function pairs(arr) {
     const out = [];
